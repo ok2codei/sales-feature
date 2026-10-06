@@ -4,36 +4,48 @@ const pool = mysql.createPool({
     host :'localhost',
     user: 'root',
     password:'YseeMR496@',
-    database: 'flash_sale'
+    database: 'flash_sale',
+    connectionLimit: 10,
+    queueLimit: 0
 });
 
 
-// Function using Atomic SQL Update directly in MySQL
+
 async function buyItemAtomic(userId) {
-  // Directly decrement stock ONLY IF stock > 0
-  const [result] = await pool.query(
+  try{
+    const [result] = await pool.query(
     'UPDATE products SET stock = stock - 1 WHERE id = 1 AND stock > 0'
   );
+  return result.affectedRows >0
+} catch(err){
+    return false; //connection error or timeout under heavy load
+}
+  
 
-  // result.affectedRows tells us if the update actually modified a row
-  if (result.affectedRows > 0) {
-    console.log(`User ${userId}: Purchase SUCCESS!`);
-  } else {
-    console.log(`User ${userId}: Purchase FAILED! (Out of stock)`);
-  }
+ 
 }
 // Function to run the test
-async function runTest() {
-  console.log('Simulating 5 users clicking "Buy Now" at the exact same millisecond...\n');
+async function runLoadTest() {
+  const TOTAL_USERS = 100000;
+  console.log(`🚀 Starting load test: ${TOTAL_USERS} users competing for 10 items...\n`);
 
-  // Fire 5 requests simultaneously using Promise.all
-  await Promise.all([
-    buyItemAtomic(1),
-    buyItemAtomic(2),
-    buyItemAtomic(3),
-    buyItemAtomic(4),
-    buyItemAtomic(5)
-  ]);
+  const startTime = Date.now();
+
+
+  // Create 100,000 promises simultaneously
+  const requests = Array.from({ length: TOTAL_USERS }, (_, i) => buyItemAtomic(i + 1));
+
+  const results = await Promise.all(requests);
+
+  const endTime = Date.now();
+  const duration = (endTime - startTime) / 1000;
+
+  const successfulPurchases = results.filter(res => res === true).length;
+  const failedPurchases = results.filter(res => res === false).length;
+
+  console.log(`⏱️ Total Time Taken: ${duration} seconds`);
+  console.log(`✅ Successful Purchases: ${successfulPurchases}`);
+  console.log(`❌ Failed Purchases (Out of stock or timed out): ${failedPurchases}`);
 
   // Check final stock in DB
   const [rows] = await pool.query('SELECT stock FROM products WHERE id = 1');
@@ -42,4 +54,4 @@ async function runTest() {
   await pool.end();
 }
 
-runTest();
+runLoadTest();
