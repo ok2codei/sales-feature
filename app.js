@@ -8,32 +8,31 @@ const pool = mysql.createPool({
 });
 
 
-async function buyItemNaive(userId) {
-  // Step A: Read stock
-  const [rows] = await pool.query('SELECT stock FROM products WHERE id = 1');
-  const currentStock = rows[0].stock;
+// Function using Atomic SQL Update directly in MySQL
+async function buyItemAtomic(userId) {
+  // Directly decrement stock ONLY IF stock > 0
+  const [result] = await pool.query(
+    'UPDATE products SET stock = stock - 1 WHERE id = 1 AND stock > 0'
+  );
 
-  // Step B: Check if stock > 0
-  if (currentStock > 0) {
-    // Step C: Deduct 1 from stock
-    await pool.query('UPDATE products SET stock = ? WHERE id = 1', [currentStock - 1]);
-    console.log(`User ${userId}: Purchase SUCCESS! (Saw stock: ${currentStock})`);
+  // result.affectedRows tells us if the update actually modified a row
+  if (result.affectedRows > 0) {
+    console.log(`User ${userId}: Purchase SUCCESS!`);
   } else {
     console.log(`User ${userId}: Purchase FAILED! (Out of stock)`);
   }
 }
-
 // Function to run the test
 async function runTest() {
   console.log('Simulating 5 users clicking "Buy Now" at the exact same millisecond...\n');
 
   // Fire 5 requests simultaneously using Promise.all
   await Promise.all([
-    buyItemNaive(1),
-    buyItemNaive(2),
-    buyItemNaive(3),
-    buyItemNaive(4),
-    buyItemNaive(5)
+    buyItemAtomic(1),
+    buyItemAtomic(2),
+    buyItemAtomic(3),
+    buyItemAtomic(4),
+    buyItemAtomic(5)
   ]);
 
   // Check final stock in DB
