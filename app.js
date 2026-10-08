@@ -1,4 +1,11 @@
 const mysql = require('mysql2/promise');
+const Redis = require('ioredis');
+
+// Connect to local Redis instance
+const redis = new Redis({
+  host: '127.0.0.1',
+  port: 6379
+});
 
 const pool = mysql.createPool({
     host :'localhost',
@@ -11,12 +18,15 @@ const pool = mysql.createPool({
 
 
 
-async function buyItemAtomic(userId) {
+async function buyItemRedis(userId) {
   try{
-    const [result] = await pool.query(
-    'UPDATE products SET stock = stock - 1 WHERE id = 1 AND stock > 0'
-  );
-  return result.affectedRows >0
+  const newStock = await redis.decr('stock:product_1');
+  
+  if (newStock >=0){
+    return true;
+  } else{
+    await redis.incr('stock:product_1')
+  }
 } catch(err){
     return false; //connection error or timeout under heavy load
 }
@@ -25,7 +35,7 @@ async function buyItemAtomic(userId) {
  
 }
 // Function to run the test
-async function runLoadTest() {
+async function runRedisLoadTest() {
   const TOTAL_USERS = 100000;
   console.log(`🚀 Starting load test: ${TOTAL_USERS} users competing for 10 items...\n`);
 
@@ -33,7 +43,7 @@ async function runLoadTest() {
 
 
   // Create 100,000 promises simultaneously
-  const requests = Array.from({ length: TOTAL_USERS }, (_, i) => buyItemAtomic(i + 1));
+  const requests = Array.from({ length: TOTAL_USERS }, (_, i) => buyItemRedis(i + 1));
 
   const results = await Promise.all(requests);
 
@@ -43,15 +53,15 @@ async function runLoadTest() {
   const successfulPurchases = results.filter(res => res === true).length;
   const failedPurchases = results.filter(res => res === false).length;
 
-  console.log(`⏱️ Total Time Taken: ${duration} seconds`);
+  console.log(`⏱️ Total Time Taken: ${duration.toFixed(2)} seconds`);
   console.log(`✅ Successful Purchases: ${successfulPurchases}`);
   console.log(`❌ Failed Purchases (Out of stock or timed out): ${failedPurchases}`);
 
-  // Check final stock in DB
-  const [rows] = await pool.query('SELECT stock FROM products WHERE id = 1');
-  console.log(`\nFinal stock remaining in DB: ${rows[0].stock}`);
+// Check final stock in Redis
+  const finalStock = await redis.get('stock:product_1');
+  console.log(`📦 Final Stock in Redis: ${finalStock}`);
 
-  await pool.end();
+  redis.quit();
 }
 
-runLoadTest();
+runRedisLoadTest();

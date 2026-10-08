@@ -11,6 +11,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "ioredis": "^6.0.0",
     "mysql2": "^3.24.5"
   }
 }
