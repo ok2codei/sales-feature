@@ -10,7 +10,7 @@ const redis = new Redis({
 const pool = mysql.createPool({
     host :'localhost',
     user: 'root',
-    password:'YseeMR496@',
+    password:'########',
     database: 'flash_sale',
     connectionLimit: 10,
     queueLimit: 0
